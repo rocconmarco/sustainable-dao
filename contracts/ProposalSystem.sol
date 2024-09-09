@@ -8,6 +8,8 @@ contract ProposalSystem {
     error ProposalSystem__NotAMember();
     error ProposalSystem__NotOwner();
     error ProposalSystem__AlreadyVoted();
+    error ProposalSystem__NotADelegate();
+    error ProposalSystem__HasDelegatedTheVote();
 
     struct Proposal {
         address proposer;
@@ -22,6 +24,10 @@ contract ProposalSystem {
     address public immutable i_owner;
     Proposal[] public s_proposals;
     mapping(address => mapping(uint256 => bool)) public hasVoted;
+    mapping(address => mapping(address => uint256)) public delegation;
+    mapping(address => address[]) public delegators;
+    mapping(address => bool) isDelegate;
+    mapping(address => bool) hasDelegatedTheVote;
 
     event ProposalCreated(
         address indexed _proposer,
@@ -47,6 +53,20 @@ contract ProposalSystem {
         _;
     }
 
+    modifier notDelegants() {
+        if (hasDelegatedTheVote[msg.sender]) {
+            revert ProposalSystem__HasDelegatedTheVote();
+        }
+        _;
+    }
+
+    modifier onlyDelegates() {
+        if(!isDelegate[msg.sender]) {
+            revert ProposalSystem__NotADelegate();
+        }
+        _;
+    }
+
     function createProposal(string memory _description) public onlyMembers {
         if (bytes(_description).length <= 0) {
             revert ProposalSystem__DescriptionCannotBeEmpty();
@@ -64,7 +84,7 @@ contract ProposalSystem {
         emit ProposalCreated(msg.sender, s_proposals.length - 1);
     }
 
-    function voteOnProposal(uint256 _proposalIndex, bool voteFor) public onlyMembers {
+    function voteOnProposal(uint256 _proposalIndex, bool voteFor) public onlyMembers notDelegants {
         if (hasVoted[msg.sender][_proposalIndex]) {
             revert ProposalSystem__AlreadyVoted();
         }
@@ -78,6 +98,42 @@ contract ProposalSystem {
         }
         s_proposals[_proposalIndex].voteCount += voterTokens;
         hasVoted[msg.sender][_proposalIndex] = true;
+    }
+
+    function delegateVote(address _delegate) public onlyMembers {
+        delegation[_delegate][msg.sender] = governanceToken.balanceOf(msg.sender);
+        isDelegate[_delegate] = true;
+        delegators[_delegate].push(msg.sender);
+        hasDelegatedTheVote[msg.sender] = true;
+    }
+
+    function voteAsADelegate(uint256 _proposalIndex, bool voteFor) public onlyMembers onlyDelegates {
+        if (hasVoted[msg.sender][_proposalIndex]) {
+            revert ProposalSystem__AlreadyVoted();
+        }
+        uint256 voterTokens = getTotalVotingPower(msg.sender);
+
+        if (voteFor) {
+            s_proposals[_proposalIndex].voteFor += voterTokens;
+        } else {
+            s_proposals[_proposalIndex].voteAgainst += voterTokens;
+        }
+        s_proposals[_proposalIndex].voteCount += voterTokens;
+        hasVoted[msg.sender][_proposalIndex] = true;
+
+        address[] memory delegants = delegators[msg.sender];
+        for(uint256 i = 0; i < delegants.length; i++) {
+            hasVoted[delegants[i]][_proposalIndex] = true;
+        }
+    }
+
+    function getTotalVotingPower(address _delegate) internal view returns(uint256) {
+        uint256 totalVotingPower = governanceToken.balanceOf(_delegate);
+        address[] memory delegants = delegators[_delegate];
+        for(uint256 i = 0; i < delegants.length; i++) {
+            totalVotingPower += delegation[_delegate][delegants[i]];
+        }
+        return totalVotingPower;
     }
 
     function getSpecificProposal(
