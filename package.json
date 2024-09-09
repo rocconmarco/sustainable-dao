@@ -1,0 +1,20 @@
+{
+  "name": "tokencreation",
+  "version": "1.0.0",
+  "description": "Exercise 1 - Mastering DAO development",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Marco Roccon",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.10",
+    "solidity-coverage": "^0.8.13"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2",
+    "hardhat-deploy": "^0.12.4"
+  }
+}
