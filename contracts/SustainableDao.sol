@@ -3,13 +3,16 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract ProposalSystem {
-    error ProposalSystem__DescriptionCannotBeEmpty();
-    error ProposalSystem__NotAMember();
-    error ProposalSystem__NotOwner();
-    error ProposalSystem__AlreadyVoted();
-    error ProposalSystem__NotADelegate();
-    error ProposalSystem__HasDelegatedTheVote();
+contract SustainableDao {
+    error SustainableDao__DescriptionCannotBeEmpty();
+    error SustainableDao__NotAMember();
+    error SustainableDao__NotOwner();
+    error SustainableDao__AlreadyVoted();
+    error SustainableDao__NotADelegate();
+    error SustainableDao__UserHasDelegatedTheVote();
+    error SustainableDao__SaleClosed();
+    error SustainableDao__SendEtherToPurchaseTokens();
+    error SustainableDao__NotEnoughTokensInTheContract();
 
     struct Proposal {
         address proposer;
@@ -23,14 +26,22 @@ contract ProposalSystem {
     IERC20 public governanceToken;
     address public immutable i_owner;
     Proposal[] public s_proposals;
-    mapping(address => mapping(uint256 => bool)) public hasVoted;
-    mapping(address => mapping(address => uint256)) public delegation;
-    mapping(address => address[]) public delegators;
-    mapping(address => bool) isDelegate;
-    mapping(address => bool) hasDelegatedTheVote;
+    mapping(address => mapping(uint256 => bool)) public s_hasVoted;
+    mapping(address => mapping(address => uint256)) public s_delegation;
+    mapping(address => address[]) public s_delegators;
+    mapping(address => bool) s_isDelegate;
+    mapping(address => bool) s_hasDelegatedTheVote;
+    uint256 public s_tokenPrice = 1 * 10 ** 16;
+    bool public s_saleOpen = true;
 
     event ProposalCreated(
         address indexed _proposer,
+        uint256 indexed _proposalIndex
+    );
+
+    event VoteRegistered(
+        address indexed _voter,
+        bool indexed _voteFor,
         uint256 indexed _proposalIndex
     );
 
@@ -41,35 +52,35 @@ contract ProposalSystem {
 
     modifier onlyOwner() {
         if (msg.sender != i_owner) {
-            revert ProposalSystem__NotOwner();
+            revert SustainableDao__NotOwner();
         }
         _;
     }
 
     modifier onlyMembers() {
         if (governanceToken.balanceOf(msg.sender) == 0) {
-            revert ProposalSystem__NotAMember();
+            revert SustainableDao__NotAMember();
         }
         _;
     }
 
     modifier notDelegants() {
-        if (hasDelegatedTheVote[msg.sender]) {
-            revert ProposalSystem__HasDelegatedTheVote();
+        if (s_hasDelegatedTheVote[msg.sender]) {
+            revert SustainableDao__UserHasDelegatedTheVote();
         }
         _;
     }
 
     modifier onlyDelegates() {
-        if(!isDelegate[msg.sender]) {
-            revert ProposalSystem__NotADelegate();
+        if(!s_isDelegate[msg.sender]) {
+            revert SustainableDao__NotADelegate();
         }
         _;
     }
 
     function createProposal(string memory _description) public onlyMembers {
         if (bytes(_description).length <= 0) {
-            revert ProposalSystem__DescriptionCannotBeEmpty();
+            revert SustainableDao__DescriptionCannotBeEmpty();
         }
 
         Proposal memory newProposal = Proposal({
@@ -85,8 +96,8 @@ contract ProposalSystem {
     }
 
     function voteOnProposal(uint256 _proposalIndex, bool voteFor) public onlyMembers notDelegants {
-        if (hasVoted[msg.sender][_proposalIndex]) {
-            revert ProposalSystem__AlreadyVoted();
+        if (s_hasVoted[msg.sender][_proposalIndex]) {
+            revert SustainableDao__AlreadyVoted();
         }
 
         uint256 voterTokens = governanceToken.balanceOf(msg.sender);
@@ -97,19 +108,20 @@ contract ProposalSystem {
             s_proposals[_proposalIndex].voteAgainst += voterTokens;
         }
         s_proposals[_proposalIndex].voteCount += voterTokens;
-        hasVoted[msg.sender][_proposalIndex] = true;
+        s_hasVoted[msg.sender][_proposalIndex] = true;
+        emit VoteRegistered(msg.sender, voteFor ,_proposalIndex);
     }
 
     function delegateVote(address _delegate) public onlyMembers {
-        delegation[_delegate][msg.sender] = governanceToken.balanceOf(msg.sender);
-        isDelegate[_delegate] = true;
-        delegators[_delegate].push(msg.sender);
-        hasDelegatedTheVote[msg.sender] = true;
+        s_delegation[_delegate][msg.sender] = governanceToken.balanceOf(msg.sender);
+        s_isDelegate[_delegate] = true;
+        s_delegators[_delegate].push(msg.sender);
+        s_hasDelegatedTheVote[msg.sender] = true;
     }
 
     function voteAsADelegate(uint256 _proposalIndex, bool voteFor) public onlyMembers onlyDelegates {
-        if (hasVoted[msg.sender][_proposalIndex]) {
-            revert ProposalSystem__AlreadyVoted();
+        if (s_hasVoted[msg.sender][_proposalIndex]) {
+            revert SustainableDao__AlreadyVoted();
         }
         uint256 voterTokens = getTotalVotingPower(msg.sender);
 
@@ -119,19 +131,45 @@ contract ProposalSystem {
             s_proposals[_proposalIndex].voteAgainst += voterTokens;
         }
         s_proposals[_proposalIndex].voteCount += voterTokens;
-        hasVoted[msg.sender][_proposalIndex] = true;
+        s_hasVoted[msg.sender][_proposalIndex] = true;
 
-        address[] memory delegants = delegators[msg.sender];
+        address[] memory delegants = s_delegators[msg.sender];
         for(uint256 i = 0; i < delegants.length; i++) {
-            hasVoted[delegants[i]][_proposalIndex] = true;
+            s_hasVoted[delegants[i]][_proposalIndex] = true;
         }
+    }
+
+    function buyTokens() public payable {
+        if(msg.value == 0) {
+            revert SustainableDao__SendEtherToPurchaseTokens();
+        }
+        if(!s_saleOpen) {
+            revert SustainableDao__SaleClosed();
+        }
+        uint256 tokensToBuy = (msg.value / s_tokenPrice) * 10 ** 18;
+        if(tokensToBuy > governanceToken.balanceOf(address(this))) {
+            revert SustainableDao__NotEnoughTokensInTheContract();
+        }
+        governanceToken.transfer(msg.sender, tokensToBuy);
+    }
+
+    function setTokenPrice(uint256 _price) public onlyOwner {
+        s_tokenPrice = _price;
+    }
+
+    function closeSale() public onlyOwner {
+        s_saleOpen = false;
+    }
+
+    function getSaleOpen() public view returns(bool) {
+        return s_saleOpen;
     }
 
     function getTotalVotingPower(address _delegate) internal view returns(uint256) {
         uint256 totalVotingPower = governanceToken.balanceOf(_delegate);
-        address[] memory delegants = delegators[_delegate];
+        address[] memory delegants = s_delegators[_delegate];
         for(uint256 i = 0; i < delegants.length; i++) {
-            totalVotingPower += delegation[_delegate][delegants[i]];
+            totalVotingPower += s_delegation[_delegate][delegants[i]];
         }
         return totalVotingPower;
     }
@@ -153,5 +191,13 @@ contract ProposalSystem {
     function getProposalVoteForPercentage(uint256 _proposalIndex) public view returns(uint256) {
         uint256 voteForPercentage = ((s_proposals[_proposalIndex].voteFor * 100) / s_proposals[_proposalIndex].voteCount);
         return voteForPercentage;
+    }
+
+    function getHasVoted(address _voter, uint256 _proposalIndex) public view returns(bool) {
+        return s_hasVoted[_voter][_proposalIndex];
+    }
+
+    function getTokenPrice() public view returns(uint256) {
+        return s_tokenPrice;
     }
 }
