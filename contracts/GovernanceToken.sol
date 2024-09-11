@@ -10,6 +10,10 @@ contract GovernanceToken is ERC20 {
     error GovernanceToken__NotOwner();
     error GovernanceToken__NotEnoughTokens();
 
+    event SustainableDaoFunded(
+        uint256 indexed _amount
+    );
+
     modifier onlyOwner() {
         if (msg.sender != i_owner) {
             revert GovernanceToken__NotOwner();
@@ -28,5 +32,6 @@ contract GovernanceToken is ERC20 {
             revert GovernanceToken__NotEnoughTokens();
         }
         _transfer(address(this), _sustainableDaoAddress, _amount);
+        emit SustainableDaoFunded(_amount);
     }
 }
