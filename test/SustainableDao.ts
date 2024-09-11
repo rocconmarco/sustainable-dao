@@ -113,11 +113,11 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.connect(user1).voteOnProposal(0, true);
     await sustainableDao.connect(user2).voteOnProposal(0, false);
 
-    /* console.log("Proposal[0]: ", await sustainableDao.getSpecificProposal(0));
+    console.log("Proposal[0]: ", await sustainableDao.getSpecificProposal(0));
     console.log(
       "Proposal[0] total votes: ",
       await sustainableDao.getProposalVotes(0)
-    ); */
+    );
   });
 
   it("Should revert with SustainableDao__AlreadyVoted", async function () {
@@ -149,10 +149,10 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.connect(user1).voteOnProposal(0, true);
     await sustainableDao.connect(user2).voteOnProposal(0, true);
 
-    /* console.log(
+    console.log(
       "Percentage of vote for: ",
       await sustainableDao.getProposalVoteForPercentage(0)
-    ); */
+    );
 
     await expect(
       sustainableDao.connect(user1).voteOnProposal(0, true)
@@ -197,11 +197,11 @@ describe("SustainableDao contract", async function () {
     expect(await sustainableDao.getHasVoted(user4, 0)).to.equal(true);
     expect(await sustainableDao.getHasVoted(user5, 0)).to.equal(true);
 
-    /* console.log("Proposal[0]", await sustainableDao.getSpecificProposal(0));
+    console.log("Proposal[0]", await sustainableDao.getSpecificProposal(0));
     console.log(
       "Percentage of vote for: ",
       await sustainableDao.getProposalVoteForPercentage(0)
-    ); */
+    );
   });
 
   it("Should not allow the delegate to vote twice", async function () {
