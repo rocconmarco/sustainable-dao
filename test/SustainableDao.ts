@@ -107,7 +107,7 @@ describe("SustainableDao contract", async function () {
       await governanceToken.balanceOf(user2.address)
     ); */
 
-    const proposalDescription = "Questa è la mia proposta";
+    const proposalDescription = "This is my proposal.";
     await sustainableDao.connect(user1).createProposal(proposalDescription);
 
     await sustainableDao.connect(user1).voteOnProposal(0, true);

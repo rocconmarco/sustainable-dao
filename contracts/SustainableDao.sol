@@ -66,6 +66,16 @@ contract SustainableDao {
         uint256 indexed _amount
     );
 
+    event NewTokenPriceSet(
+        uint256 indexed _newPrice
+    );
+
+    event NewTimelockDurationSet(
+        uint256 indexed _daysInSeconds
+    );
+
+    event SaleClosed();
+
     constructor(address _governanceToken) {
         governanceToken = IERC20(_governanceToken);
         i_owner = msg.sender;
@@ -196,14 +206,17 @@ contract SustainableDao {
 
     function setTokenPrice(uint256 _price) public onlyOwner {
         s_tokenPrice = _price;
+        emit NewTokenPriceSet(_price);
     }
 
     function closeSale() public onlyOwner {
         s_saleOpen = false;
+        emit SaleClosed();
     }
 
     function setTimelockDuration(uint256 _days) public onlyOwner {
         s_timelockDuration = _days * 1 days;
+        emit NewTimelockDurationSet(_days * 1 days);
     }
 
     function getTimelockDuration() public view returns(uint256) {
