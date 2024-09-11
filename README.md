@@ -27,31 +27,31 @@ The DAO allows the company to incentivize community engagement through proposals
 
 ## Specs for nerds
 
-Starting from the basics, I decided to use the OpenZeppelin library to implement the governance token. Upon deploying the contract, half of the initial supply will be assigned to the owner (this allows flexibility in token management and for emergency situations), while the other half will be held in the GovernanceToken.sol contract.
+Starting from the basics, I decided to use the <strong>OpenZeppelin library</strong> to implement the governance token. Upon deploying the contract, <strong>half of the initial supply</strong> will be <strong>assigned to the owner</strong> (this allows flexibility in token management and for emergency situations), while the other half will be <strong>held in the GovernanceToken.sol contract.</strong>
 
 <br>
 
-Within GovernanceToken.sol, I implemented the fundSustainableDao function, which allows ONLY the owner to transfer tokens held by the contract to the SustainableDao.sol contract, which will manage the sale of tokens to the end users.
+Within GovernanceToken.sol, I implemented the fundSustainableDao function, which allows <strong>ONLY the owner</strong> to transfer tokens held by the contract to the SustainableDao.sol contract, which will manage the <strong>sale of tokens to the end users.</strong>
 
 <br>
 
-Before creating a proposal, users will need to purchase governance tokens and become members of the DAO. This can be done via the buyTokens function in the SustainableDao.sol contract. The collected funds will be held within the contract, and the corresponding amount of governance tokens (priced by default at 0.01 ETH) will be transferred to the user's balance, certifying their membership in the DAO.
+Before creating a proposal, users will need to purchase governance tokens and <strong>become members of the DAO.</strong> This can be done via the buyTokens function in the SustainableDao.sol contract. The collected funds will be held within the contract, and the corresponding amount of governance tokens (priced <strong>by default at 0.01 ETH</strong>) will be transferred to the user's balance, certifying their membership in the DAO.
 
 <br>
 
-Once a user becomes a member, they can create a proposal by providing a detailed description and publishing it on the blockchain. Proposals with an empty description cannot be submitted.
+Once a user becomes a member, they can <strong>create a proposal</strong> by providing a detailed description and publishing it on the blockchain. Proposals with an empty description cannot be submitted.
 
 <br>
 
-Once published, users will have 2 days to vote for or against the proposal (the timelockDuration can be modified by the contract owner via a dedicated function). Voting can be done through direct democracy (the user votes autonomously, with their vote weighted according to the tokens they hold) or through liquid democracy (the user delegates someone else to vote on their behalf).
+Once published, users will have <strong>2 days to vote</strong> for or against the proposal (the timelockDuration can be modified by the contract owner via a dedicated function). Voting can be done through <strong>direct democracy</strong> (the user votes autonomously, with their vote weighted according to the tokens they hold) or through <strong>liquid democracy</strong> (the user delegates someone else to vote on their behalf).
 
 <br>
 
-After the 2-day period ends, the contract owner can call the executeProposal function, and if the proposal has received a majority of favorable votes, it will be marked as executed.
+After the 2-day period ends, the contract owner can <strong>call the executeProposal function</strong>, and if the proposal has received a majority of favorable votes, it will be marked as executed.
 
 <br>
 
-All proposals are available for consultation in an array stored on-chain, which includes the proposer’s address, votes for and against, the total number of votes, the creation timestamp, and a boolean variable indicating whether the proposal has been executed.
+All proposals are <strong>available for consultation</strong> in an array stored on-chain, which includes the proposer’s address, votes for and against, the total number of votes, the creation timestamp, and a boolean variable indicating whether the proposal has been executed.
 
 <br>
 
@@ -59,7 +59,7 @@ All proposals are available for consultation in an array stored on-chain, which 
 
 <br>
 
-The two smart contracts have been thoroughly tested using the Hardhat framework. Comprehensive tests were designed for each contract, aiming to cover 100% of the functions.
+The two smart contracts have been <strong>thoroughly tested</strong> using the <strong>Hardhat framework.</strong> Comprehensive tests were designed for each contract, aiming to cover <strong>100% of the functions.</strong>
 
 <br>
 
@@ -69,13 +69,13 @@ The two smart contracts have been thoroughly tested using the Hardhat framework.
 
 ### Custom Errors
 
-The latest conventions in error handling and gas optimization have been followed. Custom errors were created for every potential error in the protocol's usage, implementing them, where appropriate, in a dedicated modifier to improve code modularity.
+The latest conventions in <strong>error handling and gas optimization</strong> have been followed. Custom errors were created for every potential error in the protocol's usage, implementing them, where appropriate, in a dedicated modifier to improve code modularity.
 
 <br>
 
 ### Naming Conventions
 
-For greater clarity in code writing and to improve maintainability, the following conventions have been adopted:
+For <strong>greater clarity</strong> in code writing and to <strong>improve maintainability</strong>, the following conventions have been adopted:
 
 <ul>
     <li>Storage variables: s_variableName</li>
