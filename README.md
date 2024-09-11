@@ -13,15 +13,15 @@
 
 ## About The Project
 
-The project was created as part of the "Smart Contract with Solidity Advanced" course of the Master's program in Blockchain Development at start2impact University. 
+The project was created as part of the <strong>"Smart Contract with Solidity Advanced"</strong> course of the Master's program in Blockchain Development at start2impact University. 
 
 <br>
 
-The goal was to build a DAO (Decentralized Autonomous Organization) for a company that offers training courses focused on the objectives of the 2030 Agenda.
+The goal was to build a <strong>DAO (Decentralized Autonomous Organization)</strong> for a company that offers training courses focused on the objectives of the 2030 Agenda.
 
 <br>
 
-The DAO allows the company to incentivize community engagement through proposals and voting, in which DAO members can participate.
+The DAO allows the company to <strong>incentivize community engagement</strong> through proposals and voting, in which DAO members can participate.
 
 <br>
 
