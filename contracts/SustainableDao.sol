@@ -56,6 +56,16 @@ contract SustainableDao {
         uint256 indexed _voteAgainst
     );
 
+    event VoteDelegated(
+        address indexed _delegant,
+        address indexed _delegate
+    );
+
+    event TokenPurchased(
+        address indexed _buyer,
+        uint256 indexed _amount
+    );
+
     constructor(address _governanceToken) {
         governanceToken = IERC20(_governanceToken);
         i_owner = msg.sender;
@@ -129,6 +139,7 @@ contract SustainableDao {
         s_isDelegate[_delegate] = true;
         s_delegators[_delegate].push(msg.sender);
         s_hasDelegatedTheVote[msg.sender] = true;
+        emit VoteDelegated(msg.sender, _delegate);
     }
 
     function voteAsADelegate(uint256 _proposalIndex, bool voteFor) public onlyMembers onlyDelegates {
@@ -148,7 +159,9 @@ contract SustainableDao {
         address[] memory delegants = s_delegators[msg.sender];
         for(uint256 i = 0; i < delegants.length; i++) {
             s_hasVoted[delegants[i]][_proposalIndex] = true;
+            emit VoteRegistered(delegants[i], voteFor, _proposalIndex);
         }
+        emit VoteRegistered(msg.sender, voteFor, _proposalIndex);
     }
 
     function executeProposal(uint256 _proposalIndex) public onlyOwner {
@@ -178,6 +191,7 @@ contract SustainableDao {
             revert SustainableDao__NotEnoughTokensInTheContract();
         }
         governanceToken.transfer(msg.sender, tokensToBuy);
+        emit TokenPurchased(msg.sender, tokensToBuy);
     }
 
     function setTokenPrice(uint256 _price) public onlyOwner {
