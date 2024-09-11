@@ -57,8 +57,6 @@ All proposals are <strong>available for consultation</strong> in an array stored
 
 ### Testing
 
-<br>
-
 The two smart contracts have been <strong>thoroughly tested</strong> using the <strong>Hardhat framework.</strong> Comprehensive tests were designed for each contract, aiming to cover <strong>100% of the functions.</strong>
 
 <br>
