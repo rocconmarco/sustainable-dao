@@ -13,6 +13,9 @@ contract SustainableDao {
     error SustainableDao__SaleClosed();
     error SustainableDao__SendEtherToPurchaseTokens();
     error SustainableDao__NotEnoughTokensInTheContract();
+    error SustainableDao__VotingStillInProgress();
+    error SustainableDao__ProposalDidNotPass();
+    error SustainableDao__ProposalAlreadyExecuted();
 
     struct Proposal {
         address proposer;
@@ -20,6 +23,7 @@ contract SustainableDao {
         uint256 voteFor;
         uint256 voteAgainst;
         uint256 voteCount;
+        uint256 creationTime;
         bool executed;
     }
 
@@ -33,6 +37,7 @@ contract SustainableDao {
     mapping(address => bool) s_hasDelegatedTheVote;
     uint256 public s_tokenPrice = 1 * 10 ** 16;
     bool public s_saleOpen = true;
+    uint256 public s_timelockDuration = 2 days;
 
     event ProposalCreated(
         address indexed _proposer,
@@ -43,6 +48,12 @@ contract SustainableDao {
         address indexed _voter,
         bool indexed _voteFor,
         uint256 indexed _proposalIndex
+    );
+
+    event ProposalExecuted(
+        uint256 indexed _proposalIndex,
+        uint256 indexed _voteFor,
+        uint256 indexed _voteAgainst
     );
 
     constructor(address _governanceToken) {
@@ -89,6 +100,7 @@ contract SustainableDao {
             voteFor: 0,
             voteAgainst: 0,
             voteCount: 0,
+            creationTime: block.timestamp,
             executed: false
         });
         s_proposals.push(newProposal);
@@ -139,6 +151,21 @@ contract SustainableDao {
         }
     }
 
+    function executeProposal(uint256 _proposalIndex) public onlyOwner {
+        Proposal storage proposal = s_proposals[_proposalIndex];
+        if(block.timestamp <= proposal.creationTime + s_timelockDuration) {
+            revert SustainableDao__VotingStillInProgress();
+        }
+        if(proposal.voteFor < proposal.voteAgainst) {
+            revert SustainableDao__ProposalDidNotPass();
+        }
+        if(proposal.executed == true) {
+            revert SustainableDao__ProposalAlreadyExecuted();
+        }
+        proposal.executed = true;
+        emit ProposalExecuted(_proposalIndex, proposal.voteFor, proposal.voteAgainst);
+    }
+
     function buyTokens() public payable {
         if(msg.value == 0) {
             revert SustainableDao__SendEtherToPurchaseTokens();
@@ -159,6 +186,14 @@ contract SustainableDao {
 
     function closeSale() public onlyOwner {
         s_saleOpen = false;
+    }
+
+    function setTimelockDuration(uint256 _days) public onlyOwner {
+        s_timelockDuration = _days * 1 days;
+    }
+
+    function getTimelockDuration() public view returns(uint256) {
+        return s_timelockDuration;
     }
 
     function getSaleOpen() public view returns(bool) {

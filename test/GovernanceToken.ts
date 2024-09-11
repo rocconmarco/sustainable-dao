@@ -15,8 +15,8 @@ describe("GovernanceToken contract", function () {
     expect(tokenName).to.equal("GovernanceToken");
     expect(tokenSymbol).to.equal("GTK");
 
-    console.log("Token name: ", tokenName);
-    console.log("Token symbol: ", tokenSymbol);
+    // console.log("Token name: ", tokenName);
+    // console.log("Token symbol: ", tokenSymbol);
   })
   
   it("Deployment should assign the half of the supply to the owner, and half of the supply to the contract", async function () {
@@ -36,8 +36,8 @@ describe("GovernanceToken contract", function () {
     expect(halfSupply).to.equal(ownerBalance);
     expect(halfSupply).to.equal(contractBalance);
 
-    console.log("Owner balance after deployment", ownerBalance);
-    console.log("GovernanceToken contract balance after deployment", contractBalance);
+    // console.log("Owner balance after deployment", ownerBalance);
+    // console.log("GovernanceToken contract balance after deployment", contractBalance);
   });
 
   it("Should transfer token from GovernanceToken contract to SustainableDao contract", async function () {
@@ -55,9 +55,9 @@ describe("GovernanceToken contract", function () {
     await governanceToken.fundSustainableDao(sustainableDao.getAddress(), fundingAmount)
     expect(await governanceToken.balanceOf(sustainableDao.getAddress())).to.equal(fundingAmount);
 
-    console.log("SustainableDao contract balance after transfer: ", await governanceToken.balanceOf(sustainableDao.getAddress()))
-    console.log("GovernanceToken contract balance after transfer: ", await governanceToken.balanceOf(governanceToken.getAddress()))
-    console.log("Owner balance: ", await governanceToken.balanceOf(owner.address))
+    // console.log("SustainableDao contract balance after transfer: ", await governanceToken.balanceOf(sustainableDao.getAddress()))
+    // console.log("GovernanceToken contract balance after transfer: ", await governanceToken.balanceOf(governanceToken.getAddress()))
+    // console.log("Owner balance: ", await governanceToken.balanceOf(owner.address))
   });
 
   it("Should revert with custom error GovernanceToken__NotOwner", async function () {
