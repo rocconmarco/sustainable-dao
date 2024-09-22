@@ -46,8 +46,9 @@ describe("GovernanceToken contract", function () {
     const governanceToken = await ethers.deployContract("GovernanceToken", [
       initialSupply,
     ]);
+    const stakedTokensManager = await ethers.deployContract("StakedTokensManager", [governanceToken.getAddress()])
     const sustainableDao = await ethers.deployContract("SustainableDao", [
-      governanceToken.getAddress(),
+      governanceToken.getAddress(), stakedTokensManager.getAddress()
     ]);
 
     const fundingAmount = ethers.parseUnits("500000");
@@ -66,8 +67,9 @@ describe("GovernanceToken contract", function () {
     const governanceToken = await ethers.deployContract("GovernanceToken", [
       initialSupply,
     ]);
+    const stakedTokensManager = await ethers.deployContract("StakedTokensManager", [governanceToken.getAddress()])
     const sustainableDao = await ethers.deployContract("SustainableDao", [
-      governanceToken.getAddress(),
+      governanceToken.getAddress(), stakedTokensManager.getAddress()
     ]);
 
     const fundingAmount = ethers.parseUnits("500000");
@@ -81,8 +83,9 @@ describe("GovernanceToken contract", function () {
     const governanceToken = await ethers.deployContract("GovernanceToken", [
       initialSupply,
     ]);
+    const stakedTokensManager = await ethers.deployContract("StakedTokensManager", [governanceToken.getAddress()])
     const sustainableDao = await ethers.deployContract("SustainableDao", [
-      governanceToken.getAddress(),
+      governanceToken.getAddress(), stakedTokensManager.getAddress()
     ]);
 
     const fundingAmount = ethers.parseUnits("500000");

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "hardhat/console.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {StakedTokensManager} from "./StakedTokensManager.sol";
 
 contract SustainableDao {
     error SustainableDao__DescriptionCannotBeEmpty();
@@ -16,6 +18,11 @@ contract SustainableDao {
     error SustainableDao__VotingStillInProgress();
     error SustainableDao__ProposalDidNotPass();
     error SustainableDao__ProposalAlreadyExecuted();
+    error SustainableDao__TokensNotApproved();
+    error SustainableDao__NoTokensToApprove();
+    error SustainableDao__TokenTransferToSustainableDaoContractFailed();
+    error SustainableDao__TokenApprovalToStakedTokensManagerContractFailed();
+    error SustainableDao__NoAvailableTokens();
 
     struct Proposal {
         address proposer;
@@ -27,7 +34,8 @@ contract SustainableDao {
         bool executed;
     }
 
-    IERC20 public governanceToken;
+    ERC20 public governanceToken;
+    StakedTokensManager public stakedTokensManager;
     address public immutable i_owner;
     Proposal[] public s_proposals;
     mapping(address => mapping(uint256 => bool)) public s_hasVoted;
@@ -39,45 +47,27 @@ contract SustainableDao {
     bool public s_saleOpen = true;
     uint256 public s_timelockDuration = 2 days;
 
-    event ProposalCreated(
-        address indexed _proposer,
-        uint256 indexed _proposalIndex
-    );
+    event ProposalCreated(address indexed _proposer, uint256 indexed _proposalIndex);
 
-    event VoteRegistered(
-        address indexed _voter,
-        bool indexed _voteFor,
-        uint256 indexed _proposalIndex
-    );
+    event VoteRegistered(address indexed _voter, bool indexed _voteFor, uint256 indexed _proposalIndex);
 
-    event ProposalExecuted(
-        uint256 indexed _proposalIndex,
-        uint256 indexed _voteFor,
-        uint256 indexed _voteAgainst
-    );
+    event ProposalExecuted(uint256 indexed _proposalIndex, uint256 indexed _voteFor, uint256 indexed _voteAgainst);
 
-    event VoteDelegated(
-        address indexed _delegant,
-        address indexed _delegate
-    );
+    event TokensApproved(address indexed approver, address indexed spender, uint256 tokensApproved);
 
-    event TokenPurchased(
-        address indexed _buyer,
-        uint256 indexed _amount
-    );
+    event VoteDelegated(address indexed _delegant, address indexed _delegate);
 
-    event NewTokenPriceSet(
-        uint256 indexed _newPrice
-    );
+    event TokenPurchased(address indexed _buyer, uint256 indexed _amount);
 
-    event NewTimelockDurationSet(
-        uint256 indexed _daysInSeconds
-    );
+    event NewTokenPriceSet(uint256 indexed _newPrice);
+
+    event NewTimelockDurationSet(uint256 indexed _daysInSeconds);
 
     event SaleClosed();
 
-    constructor(address _governanceToken) {
-        governanceToken = IERC20(_governanceToken);
+    constructor(address _governanceToken, address _stakedTokensManager) {
+        governanceToken = ERC20(_governanceToken);
+        stakedTokensManager = StakedTokensManager(_stakedTokensManager);
         i_owner = msg.sender;
     }
 
@@ -88,9 +78,9 @@ contract SustainableDao {
         _;
     }
 
-    modifier onlyMembers() {
+    modifier onlyMembersWithAvailableTokens() {
         if (governanceToken.balanceOf(msg.sender) == 0) {
-            revert SustainableDao__NotAMember();
+            revert SustainableDao__NoAvailableTokens();
         }
         _;
     }
@@ -103,13 +93,13 @@ contract SustainableDao {
     }
 
     modifier onlyDelegates() {
-        if(!s_isDelegate[msg.sender]) {
+        if (!s_isDelegate[msg.sender]) {
             revert SustainableDao__NotADelegate();
         }
         _;
     }
 
-    function createProposal(string memory _description) public onlyMembers {
+    function createProposal(string memory _description) public onlyMembersWithAvailableTokens {
         if (bytes(_description).length <= 0) {
             revert SustainableDao__DescriptionCannotBeEmpty();
         }
@@ -127,12 +117,22 @@ contract SustainableDao {
         emit ProposalCreated(msg.sender, s_proposals.length - 1);
     }
 
-    function voteOnProposal(uint256 _proposalIndex, bool voteFor) public onlyMembers notDelegants {
+    function voteOnProposal(uint256 _proposalIndex, bool voteFor) public onlyMembersWithAvailableTokens notDelegants {
         if (s_hasVoted[msg.sender][_proposalIndex]) {
             revert SustainableDao__AlreadyVoted();
         }
 
         uint256 voterTokens = governanceToken.balanceOf(msg.sender);
+
+        bool transferSuccess = governanceToken.transferFrom(msg.sender, address(this), voterTokens);
+        if (!transferSuccess) {
+            revert SustainableDao__TokenTransferToSustainableDaoContractFailed();
+        }
+
+        bool approvalSuccess = governanceToken.approve(address(stakedTokensManager), voterTokens);
+        if (!approvalSuccess) {
+            revert SustainableDao__TokenApprovalToStakedTokensManagerContractFailed();
+        }
 
         if (voteFor) {
             s_proposals[_proposalIndex].voteFor += voterTokens;
@@ -140,23 +140,50 @@ contract SustainableDao {
             s_proposals[_proposalIndex].voteAgainst += voterTokens;
         }
         s_proposals[_proposalIndex].voteCount += voterTokens;
+        stakedTokensManager.stakeTokens(msg.sender, voterTokens);
         s_hasVoted[msg.sender][_proposalIndex] = true;
-        emit VoteRegistered(msg.sender, voteFor ,_proposalIndex);
+        emit VoteRegistered(msg.sender, voteFor, _proposalIndex);
     }
 
-    function delegateVote(address _delegate) public onlyMembers {
-        s_delegation[_delegate][msg.sender] = governanceToken.balanceOf(msg.sender);
+    function delegateVote(address _delegate) public onlyMembersWithAvailableTokens {
+        uint256 delegantTokens = governanceToken.balanceOf(msg.sender);
+
+        bool transferSuccess = governanceToken.transferFrom(msg.sender, address(this), delegantTokens);
+        if (!transferSuccess) {
+            revert SustainableDao__TokenTransferToSustainableDaoContractFailed();
+        }
+
+        bool approvalSuccess = governanceToken.approve(address(stakedTokensManager), delegantTokens);
+        if (!approvalSuccess) {
+            revert SustainableDao__TokenApprovalToStakedTokensManagerContractFailed();
+        }
+
+        s_delegation[_delegate][msg.sender] = delegantTokens;
         s_isDelegate[_delegate] = true;
         s_delegators[_delegate].push(msg.sender);
         s_hasDelegatedTheVote[msg.sender] = true;
+
+        stakedTokensManager.stakeTokens(msg.sender, delegantTokens);
+
         emit VoteDelegated(msg.sender, _delegate);
     }
 
-    function voteAsADelegate(uint256 _proposalIndex, bool voteFor) public onlyMembers onlyDelegates {
+    function voteAsADelegate(uint256 _proposalIndex, bool voteFor) public onlyMembersWithAvailableTokens onlyDelegates {
         if (s_hasVoted[msg.sender][_proposalIndex]) {
             revert SustainableDao__AlreadyVoted();
         }
         uint256 voterTokens = getTotalVotingPower(msg.sender);
+        uint256 delegateTokens = governanceToken.balanceOf(msg.sender);
+
+        bool transferSuccess = governanceToken.transferFrom(msg.sender, address(this), delegateTokens);
+        if (!transferSuccess) {
+            revert SustainableDao__TokenTransferToSustainableDaoContractFailed();
+        }
+
+        bool approvalSuccess = governanceToken.approve(address(stakedTokensManager), delegateTokens);
+        if (!approvalSuccess) {
+            revert SustainableDao__TokenApprovalToStakedTokensManagerContractFailed();
+        }
 
         if (voteFor) {
             s_proposals[_proposalIndex].voteFor += voterTokens;
@@ -167,42 +194,58 @@ contract SustainableDao {
         s_hasVoted[msg.sender][_proposalIndex] = true;
 
         address[] memory delegants = s_delegators[msg.sender];
-        for(uint256 i = 0; i < delegants.length; i++) {
+        for (uint256 i = 0; i < delegants.length; i++) {
             s_hasVoted[delegants[i]][_proposalIndex] = true;
             emit VoteRegistered(delegants[i], voteFor, _proposalIndex);
         }
+        stakedTokensManager.stakeTokens(msg.sender, delegateTokens);
         emit VoteRegistered(msg.sender, voteFor, _proposalIndex);
     }
 
     function executeProposal(uint256 _proposalIndex) public onlyOwner {
         Proposal storage proposal = s_proposals[_proposalIndex];
-        if(block.timestamp <= proposal.creationTime + s_timelockDuration) {
+        if (block.timestamp <= proposal.creationTime + s_timelockDuration) {
             revert SustainableDao__VotingStillInProgress();
         }
-        if(proposal.voteFor < proposal.voteAgainst) {
+        if (proposal.voteFor < proposal.voteAgainst) {
             revert SustainableDao__ProposalDidNotPass();
         }
-        if(proposal.executed == true) {
+        if (proposal.executed == true) {
             revert SustainableDao__ProposalAlreadyExecuted();
         }
         proposal.executed = true;
+        for (uint256 i = 0; i < stakedTokensManager.getUsersWithStakedTokensLength(); i++) {
+            address user = stakedTokensManager.s_usersWithStakedTokens(i);
+            stakedTokensManager.unstakeTokens(user);
+        }
+
         emit ProposalExecuted(_proposalIndex, proposal.voteFor, proposal.voteAgainst);
     }
 
     function buyTokens() public payable {
-        if(msg.value == 0) {
+        if (msg.value == 0) {
             revert SustainableDao__SendEtherToPurchaseTokens();
         }
-        if(!s_saleOpen) {
+        if (!s_saleOpen) {
             revert SustainableDao__SaleClosed();
         }
-        uint256 tokensToBuy = (msg.value / s_tokenPrice) * 10 ** 18;
-        if(tokensToBuy > governanceToken.balanceOf(address(this))) {
+        uint256 tokensToBuy = (msg.value / s_tokenPrice) * 10 ** governanceToken.decimals();
+        if (tokensToBuy > governanceToken.balanceOf(address(this))) {
             revert SustainableDao__NotEnoughTokensInTheContract();
         }
         governanceToken.transfer(msg.sender, tokensToBuy);
         emit TokenPurchased(msg.sender, tokensToBuy);
     }
+
+    /* function approveTokens() public {
+        uint256 userBalance = governanceToken.balanceOf(msg.sender);
+        if(userBalance == 0) {
+            revert SustainableDao__NoTokensToApprove();
+        }
+        governanceToken.approve(address(this), userBalance);
+        console.log("Approved amount:", governanceToken.allowance(msg.sender, address(this)));
+        emit TokensApproved(msg.sender, address(this), userBalance);
+    } */
 
     function setTokenPrice(uint256 _price) public onlyOwner {
         s_tokenPrice = _price;
@@ -219,26 +262,24 @@ contract SustainableDao {
         emit NewTimelockDurationSet(_days * 1 days);
     }
 
-    function getTimelockDuration() public view returns(uint256) {
+    function getTimelockDuration() public view returns (uint256) {
         return s_timelockDuration;
     }
 
-    function getSaleOpen() public view returns(bool) {
+    function getSaleOpen() public view returns (bool) {
         return s_saleOpen;
     }
 
-    function getTotalVotingPower(address _delegate) internal view returns(uint256) {
+    function getTotalVotingPower(address _delegate) internal view returns (uint256) {
         uint256 totalVotingPower = governanceToken.balanceOf(_delegate);
         address[] memory delegants = s_delegators[_delegate];
-        for(uint256 i = 0; i < delegants.length; i++) {
+        for (uint256 i = 0; i < delegants.length; i++) {
             totalVotingPower += s_delegation[_delegate][delegants[i]];
         }
         return totalVotingPower;
     }
 
-    function getSpecificProposal(
-        uint256 _proposalIndex
-    ) public view returns (Proposal memory) {
+    function getSpecificProposal(uint256 _proposalIndex) public view returns (Proposal memory) {
         return s_proposals[_proposalIndex];
     }
 
@@ -246,20 +287,21 @@ contract SustainableDao {
         return s_proposals;
     }
 
-    function getProposalVotes(uint256 _proposalIndex) public view returns(uint256) {
+    function getProposalVotes(uint256 _proposalIndex) public view returns (uint256) {
         return s_proposals[_proposalIndex].voteCount;
     }
 
-    function getProposalVoteForPercentage(uint256 _proposalIndex) public view returns(uint256) {
-        uint256 voteForPercentage = ((s_proposals[_proposalIndex].voteFor * 100) / s_proposals[_proposalIndex].voteCount);
+    function getProposalVoteForPercentage(uint256 _proposalIndex) public view returns (uint256) {
+        uint256 voteForPercentage = ((s_proposals[_proposalIndex].voteFor * 100) /
+            s_proposals[_proposalIndex].voteCount);
         return voteForPercentage;
     }
 
-    function getHasVoted(address _voter, uint256 _proposalIndex) public view returns(bool) {
+    function getHasVoted(address _voter, uint256 _proposalIndex) public view returns (bool) {
         return s_hasVoted[_voter][_proposalIndex];
     }
 
-    function getTokenPrice() public view returns(uint256) {
+    function getTokenPrice() public view returns (uint256) {
         return s_tokenPrice;
     }
 }

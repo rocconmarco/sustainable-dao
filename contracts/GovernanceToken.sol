@@ -27,6 +27,10 @@ contract GovernanceToken is ERC20 {
         _mint(address(this), (_initialSupply / 2) * 10 ** decimals());
     }
 
+    function decimals() public pure override returns (uint8) {
+        return 18;
+    }
+
     function fundSustainableDao(address _sustainableDaoAddress, uint256 _amount) public onlyOwner {
         if(_amount > balanceOf(address(this))) {
             revert GovernanceToken__NotEnoughTokens();
