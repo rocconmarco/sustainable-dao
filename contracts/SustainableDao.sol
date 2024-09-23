@@ -17,7 +17,7 @@ contract SustainableDao {
     error SustainableDao__NotEnoughTokensInTheContract();
     error SustainableDao__VotingStillInProgress();
     error SustainableDao__ProposalDidNotPass();
-    error SustainableDao__ProposalAlreadyExecuted();
+    error SustainableDao__ProposalAlreadyFinalized();
     error SustainableDao__TokensNotApproved();
     error SustainableDao__NoTokensToApprove();
     error SustainableDao__TokenTransferToSustainableDaoContractFailed();
@@ -34,7 +34,8 @@ contract SustainableDao {
         uint256 voteCount;
         uint256 creationTime;
         uint256 endVotingTimestamp;
-        bool executed;
+        bool finalized;
+        bool approved;
     }
 
     ERC20 public governanceToken;
@@ -54,7 +55,9 @@ contract SustainableDao {
 
     event VoteRegistered(address indexed _voter, bool indexed _voteFor, uint256 indexed _proposalIndex);
 
-    event ProposalExecuted(uint256 indexed _proposalIndex, uint256 indexed _voteFor, uint256 indexed _voteAgainst);
+    event ProposalApproved(uint256 indexed _proposalIndex, uint256 indexed _voteFor, uint256 indexed _voteAgainst);
+
+    event ProposalFailed(uint256 indexed _proposalIndex, uint256 indexed _voteFor, uint256 indexed _voteAgainst);
 
     event TokensApproved(address indexed approver, address indexed spender, uint256 tokensApproved);
 
@@ -115,7 +118,8 @@ contract SustainableDao {
             voteCount: 0,
             creationTime: block.timestamp,
             endVotingTimestamp: block.timestamp + s_timelockDuration,
-            executed: false
+            finalized: false,
+            approved: false
         });
         s_proposals.push(newProposal);
         emit ProposalCreated(msg.sender, s_proposals.length - 1);
@@ -181,9 +185,18 @@ contract SustainableDao {
     }
 
     function voteAsADelegate(uint256 _proposalIndex, bool voteFor) public onlyMembersWithAvailableTokens onlyDelegates {
+        if(_proposalIndex >= s_proposals.length) {
+            revert SustainableDao__InvalidProposalIndex();
+        }
+
+        if(block.timestamp > s_proposals[_proposalIndex].endVotingTimestamp) {
+            revert SustainableDao__VotingClosed();
+        }
+
         if (s_hasVoted[msg.sender][_proposalIndex]) {
             revert SustainableDao__AlreadyVoted();
         }
+        
         uint256 voterTokens = getTotalVotingPower(msg.sender);
         uint256 delegateTokens = governanceToken.balanceOf(msg.sender);
 
@@ -214,24 +227,29 @@ contract SustainableDao {
         emit VoteRegistered(msg.sender, voteFor, _proposalIndex);
     }
 
-    function executeProposal(uint256 _proposalIndex) public onlyOwner {
+    function finalizeProposal(uint256 _proposalIndex) public onlyOwner {
         Proposal storage proposal = s_proposals[_proposalIndex];
         if (block.timestamp <= proposal.creationTime + s_timelockDuration) {
             revert SustainableDao__VotingStillInProgress();
         }
-        if (proposal.voteFor < proposal.voteAgainst) {
-            revert SustainableDao__ProposalDidNotPass();
+        if (proposal.finalized == true) {
+            revert SustainableDao__ProposalAlreadyFinalized();
         }
-        if (proposal.executed == true) {
-            revert SustainableDao__ProposalAlreadyExecuted();
-        }
-        proposal.executed = true;
         for (uint256 i = 0; i < stakedTokensManager.getUsersWithStakedTokensLength(); i++) {
             address user = stakedTokensManager.s_usersWithStakedTokens(i);
             stakedTokensManager.unstakeTokens(user);
         }
+        if (proposal.voteFor < proposal.voteAgainst) {
+            proposal.finalized = true;
+            proposal.approved = false;
+            emit ProposalFailed(_proposalIndex, proposal.voteFor, proposal.voteAgainst);
+            return;
+        }
+        proposal.finalized = true;
+        proposal.approved = true;
 
-        emit ProposalExecuted(_proposalIndex, proposal.voteFor, proposal.voteAgainst);
+
+        emit ProposalApproved(_proposalIndex, proposal.voteFor, proposal.voteAgainst);
     }
 
     function buyTokens() public payable {

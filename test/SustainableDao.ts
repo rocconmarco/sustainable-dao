@@ -1,6 +1,5 @@
 import { expect } from "chai";
 import { ethers, network } from "hardhat";
-import { erc20 } from "../typechain-types/factories/@openzeppelin/contracts/token";
 
 describe("SustainableDao contract", async function () {
   it("Should not allow non-members to create a proposal", async function () {
@@ -402,8 +401,6 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.connect(user1).buyTokens({ value: etherSent });
 
     const userTokenAmountAfterPurchase = await governanceToken.balanceOf(user1.address);
-    const contractTokenAmountAfterPurchase = await governanceToken.balanceOf(sustainableDao.getAddress());
-
     expect(userTokenAmountAfterPurchase).to.equal(expectedTokens);
   });
 
@@ -434,7 +431,6 @@ describe("SustainableDao contract", async function () {
     const user1TokenAmountAfterPurchase = await governanceToken.balanceOf(user1.address);
     const user2TokenAmountAfterPurchase = await governanceToken.balanceOf(user2.address);
     const user3TokenAmountAfterPurchase = await governanceToken.balanceOf(user3.address);
-    const contractTokenAmountAfterPurchase = await governanceToken.balanceOf(sustainableDao.getAddress());
 
     expect(user1TokenAmountAfterPurchase).to.equal(expectedTokensUser1);
     expect(user2TokenAmountAfterPurchase).to.equal(expectedTokensUser2);
@@ -473,7 +469,6 @@ describe("SustainableDao contract", async function () {
     ]);
 
     const etherSent = ethers.parseEther("1");
-    const expectedTokens = ethers.parseUnits("100");
 
     await expect(sustainableDao.connect(user1).buyTokens({ value: etherSent })).to.be.revertedWithCustomError(
       sustainableDao,
@@ -524,10 +519,7 @@ describe("SustainableDao contract", async function () {
       stakedTokensManager.getAddress(),
     ]);
 
-    const saleOpen = await sustainableDao.getSaleOpen();
-
     await sustainableDao.closeSale();
-
     const saleOpenAfterClosing = await sustainableDao.getSaleOpen();
 
     expect(saleOpenAfterClosing).to.equal(false);
@@ -552,7 +544,7 @@ describe("SustainableDao contract", async function () {
     );
   });
 
-  it("Should execute a successful proposal after the timelock duration", async function () {
+  it("Should finalize and approve a successful proposal after the timelock duration", async function () {
     const [owner, user1] = await ethers.getSigners();
     const initialSupply = 1_000_000;
     const governanceToken = await ethers.deployContract("GovernanceToken", [initialSupply]);
@@ -570,15 +562,18 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, true);
 
-    await network.provider.send("evm_increaseTime", [2 * 24 * 60 * 60 + 1]);
+    const proposalEndVotingTimestamp = (await sustainableDao.getSpecificProposal(0)).endVotingTimestamp;
+
+    await network.provider.send("evm_increaseTime", [proposalEndVotingTimestamp.toString() + "1"]);
     await network.provider.send("evm_mine");
 
-    await sustainableDao.connect(owner).executeProposal(0);
+    await sustainableDao.connect(owner).finalizeProposal(0);
 
-    expect((await sustainableDao.getSpecificProposal(0)).executed).to.equal(true);
+    expect((await sustainableDao.getSpecificProposal(0)).finalized).to.equal(true);
+    expect((await sustainableDao.getSpecificProposal(0)).approved).to.equal(true);
   });
 
-  it("Should not allow to execute a proposal ahead of timelock duration", async function () {
+  it("Should not allow to finalize a proposal ahead of timelock duration", async function () {
     const [owner, user1] = await ethers.getSigners();
     const initialSupply = 1_000_000;
     const governanceToken = await ethers.deployContract("GovernanceToken", [initialSupply]);
@@ -596,13 +591,13 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, true);
 
-    await expect(sustainableDao.connect(owner).executeProposal(0)).to.be.revertedWithCustomError(
+    await expect(sustainableDao.connect(owner).finalizeProposal(0)).to.be.revertedWithCustomError(
       sustainableDao,
       "SustainableDao__VotingStillInProgress"
     );
   });
 
-  it("Should not allow to execute a proposal that did not pass", async function () {
+  it("Should not approve a proposal that did not pass", async function () {
     const [owner, user1] = await ethers.getSigners();
     const initialSupply = 1_000_000;
     const governanceToken = await ethers.deployContract("GovernanceToken", [initialSupply]);
@@ -620,16 +615,16 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, false);
 
-    await network.provider.send("evm_increaseTime", [2 * 24 * 60 * 60 + 1]);
+    const proposalEndVotingTimestamp = (await sustainableDao.getSpecificProposal(0)).endVotingTimestamp;
+
+    await network.provider.send("evm_increaseTime", [proposalEndVotingTimestamp.toString() + "1"]);
     await network.provider.send("evm_mine");
 
-    await expect(sustainableDao.connect(owner).executeProposal(0)).to.be.revertedWithCustomError(
-      sustainableDao,
-      "SustainableDao__ProposalDidNotPass"
-    );
+    await sustainableDao.connect(owner).finalizeProposal(0);
+    expect((await sustainableDao.getSpecificProposal(0)).approved).to.equal(false);
   });
 
-  it("Should not allow non-owners to execute a proposal", async function () {
+  it("Should not allow non-owners to finalize a proposal", async function () {
     const [owner, user1] = await ethers.getSigners();
     const initialSupply = 1_000_000;
     const governanceToken = await ethers.deployContract("GovernanceToken", [initialSupply]);
@@ -647,13 +642,13 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, true);
 
-    await expect(sustainableDao.connect(user1).executeProposal(0)).to.be.revertedWithCustomError(
+    await expect(sustainableDao.connect(user1).finalizeProposal(0)).to.be.revertedWithCustomError(
       sustainableDao,
       "SustainableDao__NotOwner"
     );
   });
 
-  it("Should not allow to execute a proposal twice", async function () {
+  it("Should not allow to finalize a proposal twice", async function () {
     const [owner, user1] = await ethers.getSigners();
     const initialSupply = 1_000_000;
     const governanceToken = await ethers.deployContract("GovernanceToken", [initialSupply]);
@@ -671,13 +666,15 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, true);
 
-    await network.provider.send("evm_increaseTime", [2 * 24 * 60 * 60 + 1]);
+    const proposalEndVotingTimestamp = (await sustainableDao.getSpecificProposal(0)).endVotingTimestamp;
+
+    await network.provider.send("evm_increaseTime", [proposalEndVotingTimestamp.toString() + "1"]);
     await network.provider.send("evm_mine");
 
-    await sustainableDao.connect(owner).executeProposal(0);
-    await expect(sustainableDao.connect(owner).executeProposal(0)).to.be.revertedWithCustomError(
+    await sustainableDao.connect(owner).finalizeProposal(0);
+    await expect(sustainableDao.connect(owner).finalizeProposal(0)).to.be.revertedWithCustomError(
       sustainableDao,
-      "SustainableDao__ProposalAlreadyExecuted"
+      "SustainableDao__ProposalAlreadyFinalized"
     );
   });
 
