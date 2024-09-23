@@ -23,6 +23,8 @@ contract SustainableDao {
     error SustainableDao__TokenTransferToSustainableDaoContractFailed();
     error SustainableDao__TokenApprovalToStakedTokensManagerContractFailed();
     error SustainableDao__NoAvailableTokens();
+    error SustainableDao__VotingClosed();
+    error SustainableDao__InvalidProposalIndex();
 
     struct Proposal {
         address proposer;
@@ -31,6 +33,7 @@ contract SustainableDao {
         uint256 voteAgainst;
         uint256 voteCount;
         uint256 creationTime;
+        uint256 endVotingTimestamp;
         bool executed;
     }
 
@@ -111,6 +114,7 @@ contract SustainableDao {
             voteAgainst: 0,
             voteCount: 0,
             creationTime: block.timestamp,
+            endVotingTimestamp: block.timestamp + s_timelockDuration,
             executed: false
         });
         s_proposals.push(newProposal);
@@ -118,6 +122,14 @@ contract SustainableDao {
     }
 
     function voteOnProposal(uint256 _proposalIndex, bool voteFor) public onlyMembersWithAvailableTokens notDelegants {
+        if(_proposalIndex >= s_proposals.length) {
+            revert SustainableDao__InvalidProposalIndex();
+        }
+
+        if(block.timestamp > s_proposals[_proposalIndex].endVotingTimestamp) {
+            revert SustainableDao__VotingClosed();
+        }
+
         if (s_hasVoted[msg.sender][_proposalIndex]) {
             revert SustainableDao__AlreadyVoted();
         }
@@ -236,16 +248,6 @@ contract SustainableDao {
         governanceToken.transfer(msg.sender, tokensToBuy);
         emit TokenPurchased(msg.sender, tokensToBuy);
     }
-
-    /* function approveTokens() public {
-        uint256 userBalance = governanceToken.balanceOf(msg.sender);
-        if(userBalance == 0) {
-            revert SustainableDao__NoTokensToApprove();
-        }
-        governanceToken.approve(address(this), userBalance);
-        console.log("Approved amount:", governanceToken.allowance(msg.sender, address(this)));
-        emit TokensApproved(msg.sender, address(this), userBalance);
-    } */
 
     function setTokenPrice(uint256 _price) public onlyOwner {
         s_tokenPrice = _price;

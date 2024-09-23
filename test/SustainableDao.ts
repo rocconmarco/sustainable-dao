@@ -217,6 +217,33 @@ describe("SustainableDao contract", async function () {
     await expect(sustainableDao.connect(user1).voteOnProposal(0, true)).to.be.revertedWithCustomError(sustainableDao, "SustainableDao__AlreadyVoted");
   });
 
+  it("Should not allow the user to vote after the end of voting", async function () {
+    const [owner, user1, user2] = await ethers.getSigners();
+    const initialSupply = 1_000_000;
+    const governanceToken = await ethers.deployContract("GovernanceToken", [initialSupply]);
+    const stakedTokensManager = await ethers.deployContract("StakedTokensManager", [governanceToken.getAddress()]);
+    const sustainableDao = await ethers.deployContract("SustainableDao", [
+      governanceToken.getAddress(),
+      stakedTokensManager.getAddress(),
+    ]);
+
+    const fundingAmount = ethers.parseUnits("500000");
+    await governanceToken.fundSustainableDao(sustainableDao.getAddress(), fundingAmount);
+
+    const etherSent = ethers.parseEther("1");
+    await sustainableDao.connect(user1).buyTokens({ value: etherSent });
+
+    const proposalDescription = "This is my proposal.";
+    await sustainableDao.connect(user1).createProposal(proposalDescription);
+
+    const proposalEndVotingTimestamp = (await sustainableDao.getSpecificProposal(0)).endVotingTimestamp;
+
+    await network.provider.send("evm_increaseTime", [proposalEndVotingTimestamp.toString() + "1"]);
+    await network.provider.send("evm_mine");
+
+    await expect(sustainableDao.connect(user1).voteOnProposal(0, true)).to.be.revertedWithCustomError(sustainableDao, "SustainableDao__VotingClosed");
+  })
+
   it("Should register the delegants as voters", async function () {
     const [owner, user1, user2, user3, user4, user5, user6] = await ethers.getSigners();
     const initialSupply = 1_000_000;
@@ -275,18 +302,9 @@ describe("SustainableDao contract", async function () {
     await governanceToken.transfer(user2.address, valueTransferred);
     await governanceToken.transfer(user3.address, valueTransferred);
 
-    /* console.log(
-      "User1 total balance: ",
-      await governanceToken.balanceOf(user1.address)
-    );
-    console.log(
-      "User2 total balance: ",
-      await governanceToken.balanceOf(user2.address)
-    );
-    console.log(
-      "User3 total balance: ",
-      await governanceToken.balanceOf(user3.address)
-    ); */
+    await governanceToken.connect(user1).approve(sustainableDao.getAddress(), valueTransferred);
+    await governanceToken.connect(user2).approve(sustainableDao.getAddress(), valueTransferred);
+    await governanceToken.connect(user3).approve(sustainableDao.getAddress(), valueTransferred);
 
     const proposalDescription = "This is my proposal.";
     await sustainableDao.connect(user1).createProposal(proposalDescription);
@@ -297,7 +315,7 @@ describe("SustainableDao contract", async function () {
     await sustainableDao.connect(user3).voteAsADelegate(0, true);
     await expect(sustainableDao.connect(user3).voteAsADelegate(0, true)).to.be.revertedWithCustomError(
       sustainableDao,
-      "SustainableDao__AlreadyVoted"
+      "SustainableDao__NoAvailableTokens"
     );
   });
 
@@ -316,6 +334,11 @@ describe("SustainableDao contract", async function () {
     await governanceToken.transfer(user2.address, valueTransferred);
     await governanceToken.transfer(user3.address, valueTransferred);
     await governanceToken.transfer(user4.address, valueTransferred);
+
+    await governanceToken.connect(user1).approve(sustainableDao.getAddress(), valueTransferred);
+    await governanceToken.connect(user2).approve(sustainableDao.getAddress(), valueTransferred);
+    await governanceToken.connect(user3).approve(sustainableDao.getAddress(), valueTransferred);
+    await governanceToken.connect(user4).approve(sustainableDao.getAddress(), valueTransferred);
 
     const proposalDescription = "This is my proposal.";
     await sustainableDao.connect(user1).createProposal(proposalDescription);
@@ -344,18 +367,9 @@ describe("SustainableDao contract", async function () {
     await governanceToken.transfer(user2.address, valueTransferred);
     await governanceToken.transfer(user3.address, valueTransferred);
 
-    /* console.log(
-      "User1 total balance: ",
-      await governanceToken.balanceOf(user1.address)
-    );
-    console.log(
-      "User2 total balance: ",
-      await governanceToken.balanceOf(user2.address)
-    );
-    console.log(
-      "User3 total balance: ",
-      await governanceToken.balanceOf(user3.address)
-    ); */
+    await governanceToken.connect(user1).approve(sustainableDao.getAddress(), valueTransferred);
+    await governanceToken.connect(user2).approve(sustainableDao.getAddress(), valueTransferred);
+    await governanceToken.connect(user3).approve(sustainableDao.getAddress(), valueTransferred);
 
     const proposalDescription = "This is my proposal.";
     await sustainableDao.connect(user1).createProposal(proposalDescription);
@@ -365,7 +379,7 @@ describe("SustainableDao contract", async function () {
 
     await expect(sustainableDao.connect(user1).voteOnProposal(0, true)).to.be.revertedWithCustomError(
       sustainableDao,
-      "SustainableDao__UserHasDelegatedTheVote"
+      "SustainableDao__NoAvailableTokens"
     );
   });
 
@@ -391,8 +405,6 @@ describe("SustainableDao contract", async function () {
     const contractTokenAmountAfterPurchase = await governanceToken.balanceOf(sustainableDao.getAddress());
 
     expect(userTokenAmountAfterPurchase).to.equal(expectedTokens);
-    // console.log("User balance of governance token after purchase: ", userTokenAmountAfterPurchase)
-    // console.log("SustainableDao contract balance of governance token after purchase: ", contractTokenAmountAfterPurchase)
   });
 
   it("Multiple users should purchase the right amount of governance token", async function () {
@@ -427,10 +439,6 @@ describe("SustainableDao contract", async function () {
     expect(user1TokenAmountAfterPurchase).to.equal(expectedTokensUser1);
     expect(user2TokenAmountAfterPurchase).to.equal(expectedTokensUser2);
     expect(user3TokenAmountAfterPurchase).to.equal(expectedTokensUser3);
-    // console.log("User1 balance of governance token after purchase: ", user1TokenAmountAfterPurchase)
-    // console.log("User2 balance of governance token after purchase: ", user2TokenAmountAfterPurchase)
-    // console.log("User3 balance of governance token after purchase: ", user3TokenAmountAfterPurchase)
-    // console.log("SustainableDao contract balance of governance token after purchase: ", contractTokenAmountAfterPurchase)
   });
 
   it("Should revert with custom error SustainableDao__SendEtherToPurchaseTokens", async function () {
@@ -483,10 +491,8 @@ describe("SustainableDao contract", async function () {
       stakedTokensManager.getAddress(),
     ]);
 
-    // console.log("Token price before change : ", await sustainableDao.getTokenPrice())
     const newTokenPrice = ethers.parseUnits("0.02");
     await sustainableDao.connect(owner).setTokenPrice(newTokenPrice);
-    // console.log("Token price after change : ", await sustainableDao.getTokenPrice())
 
     expect(await sustainableDao.getTokenPrice()).to.equal(newTokenPrice);
   });
@@ -519,12 +525,10 @@ describe("SustainableDao contract", async function () {
     ]);
 
     const saleOpen = await sustainableDao.getSaleOpen();
-    // console.log("Sale state before changing: ", saleOpen)
 
     await sustainableDao.closeSale();
 
     const saleOpenAfterClosing = await sustainableDao.getSaleOpen();
-    // console.log("Sale state before changing: ", saleOpenAfterClosing)
 
     expect(saleOpenAfterClosing).to.equal(false);
   });
@@ -561,6 +565,8 @@ describe("SustainableDao contract", async function () {
     const valueTransferred = 2_000_000;
     await governanceToken.transfer(user1.address, valueTransferred);
 
+    await governanceToken.connect(user1).approve(sustainableDao.getAddress(), valueTransferred)
+
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, true);
 
@@ -585,6 +591,8 @@ describe("SustainableDao contract", async function () {
     const valueTransferred = 2_000_000;
     await governanceToken.transfer(user1.address, valueTransferred);
 
+    await governanceToken.connect(user1).approve(sustainableDao.getAddress(), valueTransferred)
+
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, true);
 
@@ -606,6 +614,8 @@ describe("SustainableDao contract", async function () {
 
     const valueTransferred = 2_000_000;
     await governanceToken.transfer(user1.address, valueTransferred);
+
+    await governanceToken.connect(user1).approve(sustainableDao.getAddress(), valueTransferred)
 
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, false);
@@ -632,6 +642,8 @@ describe("SustainableDao contract", async function () {
     const valueTransferred = 2_000_000;
     await governanceToken.transfer(user1.address, valueTransferred);
 
+    await governanceToken.connect(user1).approve(sustainableDao.getAddress(), valueTransferred)
+
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, true);
 
@@ -653,6 +665,8 @@ describe("SustainableDao contract", async function () {
 
     const valueTransferred = 2_000_000;
     await governanceToken.transfer(user1.address, valueTransferred);
+
+    await governanceToken.connect(user1).approve(sustainableDao.getAddress(), valueTransferred)
 
     await sustainableDao.createProposal("This is my proposal.");
     await sustainableDao.connect(user1).voteOnProposal(0, true);

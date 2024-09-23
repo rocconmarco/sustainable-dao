@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract StakedTokensManager {
     IERC20 public immutable i_governanceToken;
-    /* address public immutable i_sustainableDao; */
 
     mapping(address => uint256) s_stakedBalances;
     address[] public s_usersWithStakedTokens;
@@ -22,20 +21,20 @@ contract StakedTokensManager {
     }
 
     function stakeTokens(address _user, uint256 _amount) external {
-    bool transferFromSustainableDaoSuccess = i_governanceToken.transferFrom(msg.sender, address(this), _amount);
-    if(!transferFromSustainableDaoSuccess) {
-        revert StakedTokensManager__TransferFromSustainableDaoFailed();
+        bool transferFromSustainableDaoSuccess = i_governanceToken.transferFrom(msg.sender, address(this), _amount);
+        if (!transferFromSustainableDaoSuccess) {
+            revert StakedTokensManager__TransferFromSustainableDaoFailed();
+        }
+        s_stakedBalances[_user] += _amount;
+        if (s_stakedBalances[_user] == _amount) {
+            s_usersWithStakedTokens.push(_user);
+        }
+        emit TokensStaked(_user, _amount);
     }
-    s_stakedBalances[_user] += _amount;
-    if (s_stakedBalances[_user] == _amount) {
-        s_usersWithStakedTokens.push(_user);
-    }
-    emit TokensStaked(_user, _amount);
-}
 
     function unstakeTokens(address _user) external {
         uint256 amount = s_stakedBalances[_user];
-        if(amount == 0) {
+        if (amount == 0) {
             revert StakedTokensManager__NoTokensStaked();
         }
         s_stakedBalances[_user] = 0;
@@ -43,11 +42,11 @@ contract StakedTokensManager {
         emit TokensUnstaked(_user, amount);
     }
 
-    function getUsersWithStakedTokensLength() external view returns(uint256) {
+    function getUsersWithStakedTokensLength() external view returns (uint256) {
         return s_usersWithStakedTokens.length;
     }
 
-    function getUserStakedTokens(address _user) public view returns(uint256) {
+    function getUserStakedTokens(address _user) public view returns (uint256) {
         return s_stakedBalances[_user];
     }
 }
